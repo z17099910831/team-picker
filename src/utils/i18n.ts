@@ -2,7 +2,7 @@ import { Language } from './types';
 
 export const TRANSLATIONS: Record<Language, Record<string, string>> = {
   en: {
-    appTitle: 'Team Picker Wheel',
+    appTitle: 'cvs',
     appSubtitle: 'Randomly assign people to balanced teams or spin the wheel to decide',
     navWheel: 'Wheel Stage',
     navParticipants: 'Participants',
@@ -97,7 +97,7 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     diagnosticsPassed: 'Verified: 100% participant preservation, Fisher–Yates uniform shuffle, max Δ ≤ 1 balance, exact pointer alignment.',
   },
   zh: {
-    appTitle: '团队随机抽签转盘',
+    appTitle: 'cvs',
     appSubtitle: '将参与者随机均衡分配到各个团队，或转动转盘决定结果',
     navWheel: '抽签转盘',
     navParticipants: '参与者管理',
