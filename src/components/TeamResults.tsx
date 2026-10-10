@@ -15,6 +15,8 @@ import {
   TeamAssignmentMap,
 } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
+import { getDefaultPhotoForIndex } from '../utils/avatar';
+import { ParticipantAvatar } from './ParticipantAvatar';
 
 interface TeamResultsProps {
   teams: Team[];
@@ -46,6 +48,10 @@ export const TeamResults: React.FC<TeamResultsProps> = ({
 
   const activeParticipants = participants.filter((p) => !p.excluded);
   const excludedParticipants = participants.filter((p) => p.excluded);
+
+  // Map participant ID to their index so fallback default photos stay consistent
+  const participantIndexMap = new Map<string, number>();
+  participants.forEach((p, idx) => participantIndexMap.set(p.id, idx));
 
   const assignedIds = new Set<string>();
   teams.forEach((team) => {
@@ -80,7 +86,6 @@ export const TeamResults: React.FC<TeamResultsProps> = ({
       setCopiedAll(true);
       setTimeout(() => setCopiedAll(false), 2000);
     } catch {
-      // Fallback copy via textarea
       const ta = document.createElement('textarea');
       ta.value = text;
       document.body.appendChild(ta);
@@ -109,7 +114,7 @@ export const TeamResults: React.FC<TeamResultsProps> = ({
   const handleDownloadFile = (format: 'txt' | 'csv') => {
     let content = '';
     let mimeType = 'text/plain;charset=utf-8';
-    let filename = `team-results.${format}`;
+    const filename = `team-results.${format}`;
 
     if (format === 'txt') {
       content = formatPlainTextExport();
@@ -162,7 +167,6 @@ export const TeamResults: React.FC<TeamResultsProps> = ({
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white font-display">
             {t.resultsTitle}
           </h2>
-          {/* Unboxed clean metadata */}
           <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono tabular-nums">
             <span>{t.resultsSubtitle}</span>
             <span aria-hidden="true">·</span>
@@ -257,7 +261,7 @@ export const TeamResults: React.FC<TeamResultsProps> = ({
         </div>
       )}
 
-      {/* Team Cards Grid — All-around hairline border, NO thick left accent border */}
+      {/* Team Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
         {teams.map((team) => {
           const members = assignments[team.id] || [];
@@ -280,7 +284,6 @@ export const TeamResults: React.FC<TeamResultsProps> = ({
                       {team.name}
                     </h3>
                   </div>
-                  {/* Unboxed quiet metadata */}
                   <div className="mt-1 text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
                     <span>
                       {members.length}{' '}
@@ -310,47 +313,57 @@ export const TeamResults: React.FC<TeamResultsProps> = ({
                 </button>
               </div>
 
-              {/* Member List */}
+              {/* Member List with Photos */}
               {members.length === 0 ? (
                 <div className="py-6 text-center text-xs text-slate-400 italic">
                   No members assigned
                 </div>
               ) : (
-                <ol className="space-y-1.5 flex-1">
-                  {members.map((member, mIdx) => (
-                    <li
-                      key={member.id}
-                      className="group flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 text-sm text-slate-800 dark:text-slate-200"
-                    >
-                      <span className="flex items-center gap-2 min-w-0">
-                        <span className="text-xs font-mono text-slate-400 tabular-nums w-5 shrink-0">
-                          {mIdx + 1}.
-                        </span>
-                        <span className="font-medium truncate">
-                          {member.name}
-                        </span>
-                      </span>
-
-                      {/* Quick manual move dropdown on hover/focus */}
-                      <select
-                        value={team.id}
-                        aria-label={`Move ${member.name} to another team`}
-                        onChange={(e) =>
-                          onMoveParticipantBetweenTeams(
-                            member.id,
-                            e.target.value
-                          )
-                        }
-                        className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5 text-slate-600 dark:text-slate-300 transition-opacity no-print cursor-pointer"
+                <ol className="space-y-2 flex-1">
+                  {members.map((member, mIdx) => {
+                    const pIndex = participantIndexMap.get(member.id) ?? mIdx;
+                    return (
+                      <li
+                        key={member.id}
+                        className="group flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 text-sm text-slate-800 dark:text-slate-200"
                       >
-                        {teams.map((targetTeam) => (
-                          <option key={targetTeam.id} value={targetTeam.id}>
-                            → {targetTeam.name}
-                          </option>
-                        ))}
-                      </select>
-                    </li>
-                  ))}
+                        <span className="flex items-center gap-2.5 min-w-0">
+                          <span className="text-xs font-mono text-slate-400 tabular-nums w-4 shrink-0">
+                            {mIdx + 1}.
+                          </span>
+                          <ParticipantAvatar
+                            name={member.name}
+                            photoUrl={
+                              member.photoUrl || getDefaultPhotoForIndex(pIndex)
+                            }
+                            size="sm"
+                          />
+                          <span className="font-medium truncate">
+                            {member.name}
+                          </span>
+                        </span>
+
+                        {/* Quick manual move dropdown on hover/focus */}
+                        <select
+                          value={team.id}
+                          aria-label={`Move ${member.name} to another team`}
+                          onChange={(e) =>
+                            onMoveParticipantBetweenTeams(
+                              member.id,
+                              e.target.value
+                            )
+                          }
+                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5 text-slate-600 dark:text-slate-300 transition-opacity no-print cursor-pointer"
+                        >
+                          {teams.map((targetTeam) => (
+                            <option key={targetTeam.id} value={targetTeam.id}>
+                              → {targetTeam.name}
+                            </option>
+                          ))}
+                        </select>
+                      </li>
+                    );
+                  })}
                 </ol>
               )}
             </div>
@@ -358,32 +371,62 @@ export const TeamResults: React.FC<TeamResultsProps> = ({
         })}
       </div>
 
-      {/* Unassigned or Excluded Pools (if any) */}
+      {/* Unassigned or Excluded Pools with Avatars */}
       {(unassignedParticipants.length > 0 || excludedParticipants.length > 0) && (
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 no-print">
           {unassignedParticipants.length > 0 && (
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                   {t.unassignedPool} ({unassignedParticipants.length})
                 </h3>
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                {unassignedParticipants.map((p) => p.name).join(' · ')}
-              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                {unassignedParticipants.map((p) => {
+                  const pIndex = participantIndexMap.get(p.id) ?? 0;
+                  return (
+                    <div
+                      key={p.id}
+                      className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300"
+                    >
+                      <ParticipantAvatar
+                        name={p.name}
+                        photoUrl={p.photoUrl || getDefaultPhotoForIndex(pIndex)}
+                        size="xs"
+                      />
+                      <span>{p.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
           {excludedParticipants.length > 0 && (
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                   {t.excludedPool} ({excludedParticipants.length})
                 </h3>
               </div>
-              <p className="text-xs text-slate-400 dark:text-slate-500 leading-relaxed">
-                {excludedParticipants.map((p) => p.name).join(' · ')}
-              </p>
+              <div className="flex flex-wrap items-center gap-3 opacity-70">
+                {excludedParticipants.map((p) => {
+                  const pIndex = participantIndexMap.get(p.id) ?? 0;
+                  return (
+                    <div
+                      key={p.id}
+                      className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400"
+                    >
+                      <ParticipantAvatar
+                        name={p.name}
+                        photoUrl={p.photoUrl || getDefaultPhotoForIndex(pIndex)}
+                        size="xs"
+                      />
+                      <span className="line-through">{p.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

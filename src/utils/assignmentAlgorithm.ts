@@ -5,6 +5,7 @@ import {
   TeamAssignmentMap,
   ValidationIssue,
 } from '../types';
+import { getDefaultPhotoForIndex } from './avatar';
 
 export const TEAM_COLOR_PALETTE = [
   '#2563EB', // Blue 600
@@ -44,6 +45,7 @@ export function createSampleParticipants(): Participant[] {
   return SAMPLE_PARTICIPANT_NAMES.map((name, index) => ({
     id: `p_sample_${index}_${Math.random().toString(36).substring(2, 6)}`,
     name,
+    photoUrl: getDefaultPhotoForIndex(index),
     excluded: false,
   }));
 }

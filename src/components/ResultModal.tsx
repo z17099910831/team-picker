@@ -9,6 +9,8 @@ import {
   WheelSegment,
 } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
+import { getDefaultPhotoForIndex } from '../utils/avatar';
+import { ParticipantAvatar } from './ParticipantAvatar';
 
 interface ResultModalProps {
   isOpen: boolean;
@@ -58,9 +60,24 @@ export const ResultModal: React.FC<ResultModalProps> = ({
           <X className="w-5 h-5" />
         </button>
 
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 mb-3">
-          <Sparkles className="w-6 h-6" />
-        </div>
+        {wheelMode === 'assign_participants' && selectedParticipant ? (
+          <div className="flex justify-center mb-3">
+            <ParticipantAvatar
+              name={selectedParticipant.name}
+              photoUrl={
+                selectedParticipant.photoUrl ||
+                winnerSegment.photoUrl ||
+                getDefaultPhotoForIndex(0)
+              }
+              size="xl"
+              className="ring-4 ring-blue-600/20 shadow-md"
+            />
+          </div>
+        ) : (
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 mb-3">
+            <Sparkles className="w-6 h-6" />
+          </div>
+        )}
 
         <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
           {wheelMode === 'pick_team'

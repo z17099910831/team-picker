@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   UserPlus,
   Trash2,
@@ -11,6 +11,7 @@ import {
   UserX,
   Plus,
   X,
+  Camera,
 } from 'lucide-react';
 import {
   FairnessRule,
@@ -25,6 +26,11 @@ import {
   fisherYatesShuffle,
   generateId,
 } from '../utils/assignmentAlgorithm';
+import {
+  getDefaultPhotoForIndex,
+  processUploadedPhotoFile,
+} from '../utils/avatar';
+import { ParticipantAvatar } from './ParticipantAvatar';
 
 interface ParticipantEditorProps {
   participants: Participant[];
@@ -46,18 +52,24 @@ export const ParticipantEditor: React.FC<ParticipantEditorProps> = ({
   disabled = false,
 }) => {
   const t = TRANSLATIONS[language];
-  const [activeTab, setActiveTab] = useState<'bulk' | 'list' | 'fairness'>('bulk');
+  const [activeTab, setActiveTab] = useState<'list' | 'bulk' | 'fairness'>('list');
   const [newName, setNewName] = useState('');
+  const [newPhotoUrl, setNewPhotoUrl] = useState<string | undefined>(undefined);
   const [bulkText, setBulkText] = useState(() =>
     participants.map((p) => p.name).join('\n')
   );
+
+  // Hidden file input for per-participant photo upload
+  const rowFileInputRef = useRef<HTMLInputElement | null>(null);
+  const newEntryFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadingParticipantId, setUploadingParticipantId] = useState<string | null>(null);
 
   // Rule builder state
   const [ruleType, setRuleType] = useState<FairnessRuleType>('separate');
   const [rulePersonA, setRulePersonA] = useState<string>('');
   const [rulePersonB, setRulePersonB] = useState<string>('');
 
-  // Keep bulkText synchronized when participants are updated externally (e.g. Sample Data, Deduplicate)
+  // Keep bulkText synchronized when participants are updated externally
   useEffect(() => {
     const currentLines = bulkText
       .split('\n')
@@ -72,7 +84,7 @@ export const ParticipantEditor: React.FC<ParticipantEditorProps> = ({
     }
   }, [participants]);
 
-  // Handle multiline textarea edits while preserving existing participant IDs, locks, and exclusions by index/name match
+  // Handle multiline textarea edits while preserving existing participant IDs and photos
   const handleBulkTextChange = (rawText: string) => {
     setBulkText(rawText);
     const lines = rawText
@@ -86,11 +98,16 @@ export const ParticipantEditor: React.FC<ParticipantEditorProps> = ({
         return existingAtIndex;
       }
       if (existingAtIndex) {
-        return { ...existingAtIndex, name };
+        return {
+          ...existingAtIndex,
+          name,
+          photoUrl: existingAtIndex.photoUrl || getDefaultPhotoForIndex(idx),
+        };
       }
       return {
         id: generateId('p'),
         name,
+        photoUrl: getDefaultPhotoForIndex(idx),
         excluded: false,
       };
     });
@@ -102,12 +119,60 @@ export const ParticipantEditor: React.FC<ParticipantEditorProps> = ({
     e.preventDefault();
     const trimmed = newName.trim();
     if (!trimmed) return;
-    const next = [
+    const nextIdx = participants.length;
+    const next: Participant[] = [
       ...participants,
-      { id: generateId('p'), name: trimmed, excluded: false },
+      {
+        id: generateId('p'),
+        name: trimmed,
+        photoUrl: newPhotoUrl || getDefaultPhotoForIndex(nextIdx),
+        excluded: false,
+      },
     ];
     onChangeParticipants(next);
     setNewName('');
+    setNewPhotoUrl(undefined);
+  };
+
+  const handleNewEntryFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const dataUrl = await processUploadedPhotoFile(file);
+      setNewPhotoUrl(dataUrl);
+    } catch {
+      // ignore invalid image
+    }
+  };
+
+  const triggerRowPhotoUpload = (participantId: string) => {
+    if (disabled) return;
+    setUploadingParticipantId(participantId);
+    rowFileInputRef.current?.click();
+  };
+
+  const handleRowFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !uploadingParticipantId) return;
+
+    try {
+      const dataUrl = await processUploadedPhotoFile(file);
+      onChangeParticipants(
+        participants.map((p) =>
+          p.id === uploadingParticipantId ? { ...p, photoUrl: dataUrl } : p
+        )
+      );
+    } catch {
+      // ignore invalid image
+    } finally {
+      setUploadingParticipantId(null);
+    }
   };
 
   const handleUpdateName = (id: string, name: string) => {
@@ -206,6 +271,22 @@ export const ParticipantEditor: React.FC<ParticipantEditorProps> = ({
       id="participants-panel"
       className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5"
     >
+      {/* Hidden file inputs for photo uploads */}
+      <input
+        ref={rowFileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleRowFileChange}
+        className="hidden"
+      />
+      <input
+        ref={newEntryFileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleNewEntryFileChange}
+        className="hidden"
+      />
+
       {/* Header & Clean Unboxed Metadata */}
       <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
         <div>
@@ -217,7 +298,6 @@ export const ParticipantEditor: React.FC<ParticipantEditorProps> = ({
           </p>
         </div>
 
-        {/* Unboxed metadata with typographic separators */}
         <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 font-mono tabular-nums">
           <span>
             {t.totalCount}: <strong>{participants.length}</strong>
@@ -233,17 +313,6 @@ export const ParticipantEditor: React.FC<ParticipantEditorProps> = ({
       <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg mb-4">
         <button
           type="button"
-          onClick={() => setActiveTab('bulk')}
-          className={`flex-1 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-            activeTab === 'bulk'
-              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          {t.bulkEditTab}
-        </button>
-        <button
-          type="button"
           onClick={() => setActiveTab('list')}
           className={`flex-1 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
             activeTab === 'list'
@@ -252,6 +321,17 @@ export const ParticipantEditor: React.FC<ParticipantEditorProps> = ({
           }`}
         >
           {t.listEditTab} ({participants.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('bulk')}
+          className={`flex-1 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+            activeTab === 'bulk'
+              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          {t.bulkEditTab}
         </button>
         <button
           type="button"
@@ -266,9 +346,32 @@ export const ParticipantEditor: React.FC<ParticipantEditorProps> = ({
         </button>
       </div>
 
-      {/* Quick Add Single Participant Input */}
+      {/* Quick Add Single Participant Input with Optional Photo Upload */}
       {activeTab !== 'fairness' && (
-        <form onSubmit={handleAddSingleParticipant} className="flex gap-2 mb-3">
+        <form onSubmit={handleAddSingleParticipant} className="flex items-center gap-2 mb-3">
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => newEntryFileInputRef.current?.click()}
+            title={
+              language === 'zh'
+                ? '为新成员上传头像照片'
+                : 'Upload photo for new participant'
+            }
+            className="relative group flex items-center justify-center w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-950/50 border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0 transition-colors cursor-pointer"
+          >
+            {newPhotoUrl ? (
+              <img
+                src={newPhotoUrl}
+                alt="New participant preview"
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <Camera className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-blue-600" />
+            )}
+          </button>
+
           <input
             type="text"
             value={newName}
@@ -289,24 +392,9 @@ export const ParticipantEditor: React.FC<ParticipantEditorProps> = ({
         </form>
       )}
 
-      {/* Tab 1: Bulk Multiline Editor */}
-      {activeTab === 'bulk' && (
-        <div>
-          <textarea
-            value={bulkText}
-            disabled={disabled}
-            onChange={(e) => handleBulkTextChange(e.target.value)}
-            rows={7}
-            aria-label={t.participantsTitle}
-            placeholder="Alex&#10;Bella&#10;Charlie..."
-            className="w-full p-3 text-sm bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-sans leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-600 resize-y"
-          />
-        </div>
-      )}
-
-      {/* Tab 2: Interactive Individual List */}
+      {/* Tab 1: Interactive Individual List with Photo & Upload Button per Name */}
       {activeTab === 'list' && (
-        <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg">
+        <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg">
           {participants.length === 0 ? (
             <div className="p-6 text-center text-xs text-slate-400">
               No participants in list.
@@ -321,9 +409,31 @@ export const ParticipantEditor: React.FC<ParticipantEditorProps> = ({
                     : 'bg-white dark:bg-slate-900'
                 }`}
               >
-                <span className="w-5 text-xs font-mono text-slate-400 tabular-nums shrink-0">
+                <span className="w-4 text-xs font-mono text-slate-400 tabular-nums shrink-0">
                   {idx + 1}.
                 </span>
+
+                {/* Clickable Avatar with Camera Overlay */}
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => triggerRowPhotoUpload(p.id)}
+                  title={
+                    language === 'zh'
+                      ? `更换 ${p.name} 的照片`
+                      : `Upload photo for ${p.name}`
+                  }
+                  className="relative group rounded-full shrink-0 focus-visible:outline-2 focus-visible:outline-blue-600 cursor-pointer"
+                >
+                  <ParticipantAvatar
+                    name={p.name}
+                    photoUrl={p.photoUrl || getDefaultPhotoForIndex(idx)}
+                    size="sm"
+                  />
+                  <span className="absolute inset-0 rounded-full bg-slate-900/55 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                    <Camera className="w-3.5 h-3.5 text-white" />
+                  </span>
+                </button>
 
                 <input
                   type="text"
@@ -337,6 +447,22 @@ export const ParticipantEditor: React.FC<ParticipantEditorProps> = ({
                       : 'text-slate-900 dark:text-white font-medium'
                   }`}
                 />
+
+                {/* Dedicated Upload Photo Button for Each Name */}
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => triggerRowPhotoUpload(p.id)}
+                  title={
+                    language === 'zh'
+                      ? `上传 ${p.name} 的照片`
+                      : `Upload photo for ${p.name}`
+                  }
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50/80 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200/80 dark:border-blue-800 rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <Camera className="w-3 h-3" />
+                  <span>{language === 'zh' ? '上传照片' : 'Photo'}</span>
+                </button>
 
                 {/* Reorder Up/Down */}
                 <div className="flex items-center gap-0.5 shrink-0">
@@ -395,6 +521,21 @@ export const ParticipantEditor: React.FC<ParticipantEditorProps> = ({
         </div>
       )}
 
+      {/* Tab 2: Bulk Multiline Editor */}
+      {activeTab === 'bulk' && (
+        <div>
+          <textarea
+            value={bulkText}
+            disabled={disabled}
+            onChange={(e) => handleBulkTextChange(e.target.value)}
+            rows={7}
+            aria-label={t.participantsTitle}
+            placeholder="Alex&#10;Bella&#10;Charlie..."
+            className="w-full p-3 text-sm bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-sans leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-600 resize-y"
+          />
+        </div>
+      )}
+
       {/* Tab 3: Fairness Rules & Team Locks */}
       {activeTab === 'fairness' && (
         <div className="space-y-4">
@@ -407,13 +548,18 @@ export const ParticipantEditor: React.FC<ParticipantEditorProps> = ({
             <div className="max-h-40 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg">
               {participants
                 .filter((p) => !p.excluded)
-                .map((p) => (
+                .map((p, idx) => (
                   <div
                     key={p.id}
                     className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs"
                   >
-                    <span className="font-medium text-slate-800 dark:text-slate-200 truncate">
-                      {p.name}
+                    <span className="flex items-center gap-2 font-medium text-slate-800 dark:text-slate-200 truncate">
+                      <ParticipantAvatar
+                        name={p.name}
+                        photoUrl={p.photoUrl || getDefaultPhotoForIndex(idx)}
+                        size="xs"
+                      />
+                      <span className="truncate">{p.name}</span>
                     </span>
                     <select
                       value={p.lockedTeamId || ''}
@@ -553,7 +699,7 @@ export const ParticipantEditor: React.FC<ParticipantEditorProps> = ({
         </div>
       )}
 
-      {/* Footer Action Bar: Shuffle List, Include All, Clear All, Restore Sample */}
+      {/* Footer Action Bar */}
       <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           <button

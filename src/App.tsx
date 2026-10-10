@@ -42,6 +42,7 @@ import {
 } from './utils/assignmentAlgorithm';
 import { runSystemDiagnostics } from './utils/wheelMath';
 import { triggerConfetti } from './utils/sound';
+import { getDefaultPhotoForIndex } from './utils/avatar';
 import { Header } from './components/Header';
 import { SpinningWheel } from './components/SpinningWheel';
 import { ParticipantEditor } from './components/ParticipantEditor';
@@ -87,10 +88,15 @@ function loadInitialState(): AppPersistedState {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<AppPersistedState>;
+    const rawParticipants = Array.isArray(parsed.participants)
+      ? parsed.participants.map((p, idx) => ({
+          ...p,
+          photoUrl: p.photoUrl || getDefaultPhotoForIndex(idx),
+        }))
+      : fallback.participants;
+
     return {
-      participants: Array.isArray(parsed.participants)
-        ? parsed.participants
-        : fallback.participants,
+      participants: rawParticipants,
       teams:
         Array.isArray(parsed.teams) && parsed.teams.length > 0
           ? parsed.teams
@@ -283,6 +289,7 @@ export default function App() {
       return unassignedParticipants.map((p, idx) => ({
         id: p.id,
         label: p.name,
+        photoUrl: p.photoUrl || getDefaultPhotoForIndex(idx),
         color: TEAM_COLOR_PALETTE[idx % TEAM_COLOR_PALETTE.length],
       }));
     }

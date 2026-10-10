@@ -57,6 +57,8 @@ export const SpinningWheel: React.FC<SpinningWheelProps> = ({
           },
         ];
 
+  const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+
   const drawWheel = useCallback(
     (rotationDeg: number) => {
       const canvas = canvasRef.current;
@@ -111,32 +113,62 @@ export const SpinningWheel: React.FC<SpinningWheelProps> = ({
         ctx.strokeStyle = '#FFFFFF';
         ctx.stroke();
 
-        // Draw label along the radial center of the slice
+        // Draw label and optional circular avatar along the radial center of the slice
         ctx.save();
         ctx.translate(centerX, centerY);
         ctx.rotate(startAngle + sliceRad / 2);
+
+        const hasPhoto = Boolean(segment.photoUrl && total <= 18);
+        const avatarRadius = total > 12 ? 12 : 15;
+        const avatarCenterDist = innerRadius - 24;
+
+        if (hasPhoto && segment.photoUrl) {
+          const cachedImg = imageCacheRef.current.get(segment.photoUrl);
+          if (cachedImg && cachedImg.complete && cachedImg.naturalWidth > 0) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(avatarCenterDist, 0, avatarRadius, 0, 2 * Math.PI);
+            ctx.closePath();
+            ctx.clip();
+            ctx.drawImage(
+              cachedImg,
+              avatarCenterDist - avatarRadius,
+              -avatarRadius,
+              avatarRadius * 2,
+              avatarRadius * 2
+            );
+            ctx.restore();
+
+            ctx.beginPath();
+            ctx.arc(avatarCenterDist, 0, avatarRadius, 0, 2 * Math.PI);
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.stroke();
+          }
+        }
 
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = '#FFFFFF';
 
-        // Dynamic font sizing based on segment count and label length
-        const fontSize = total > 24 ? 11 : total > 14 ? 13 : total > 8 ? 15 : 17;
+        const fontSize = total > 24 ? 11 : total > 14 ? 13 : total > 8 ? 14 : 16;
         ctx.font = `700 ${fontSize}px "Plus Jakarta Sans", sans-serif`;
 
-        const maxLabelChars = total > 18 ? 14 : 18;
+        const maxLabelChars = hasPhoto ? 12 : total > 18 ? 14 : 18;
         const displayLabel =
           segment.label.length > maxLabelChars
             ? segment.label.slice(0, maxLabelChars - 1) + '…'
             : segment.label;
 
-        // Subtle text shadow for high contrast legibility on all segment colors
         ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
         ctx.shadowBlur = 3;
         ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = 1;
 
-        ctx.fillText(displayLabel, innerRadius - 22, 0);
+        const textRightOffset = hasPhoto
+          ? avatarCenterDist - avatarRadius - 8
+          : innerRadius - 22;
+        ctx.fillText(displayLabel, textRightOffset, 0);
         ctx.restore();
       }
 
@@ -170,6 +202,23 @@ export const SpinningWheel: React.FC<SpinningWheelProps> = ({
     },
     [safeSegments]
   );
+
+  // Preload segment photos into HTMLImageElement cache for canvas rendering
+  useEffect(() => {
+    safeSegments.forEach((seg) => {
+      if (seg.photoUrl && !imageCacheRef.current.has(seg.photoUrl)) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          if (!isSpinning) {
+            drawWheel(rotationRef.current);
+          }
+        };
+        img.src = seg.photoUrl;
+        imageCacheRef.current.set(seg.photoUrl, img);
+      }
+    });
+  }, [safeSegments, isSpinning, drawWheel]);
 
   // Redraw when segments or language change
   useEffect(() => {

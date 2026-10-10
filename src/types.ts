@@ -4,6 +4,7 @@ export type ThemeMode = 'light' | 'dark';
 export interface Participant {
   id: string;
   name: string;
+  photoUrl?: string;
   excluded?: boolean;
   lockedTeamId?: string;
 }
@@ -49,6 +50,7 @@ export interface WheelSegment {
   id: string;
   label: string;
   color: string;
+  photoUrl?: string;
   subLabel?: string;
 }
 
