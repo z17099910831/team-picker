@@ -1,0 +1,6 @@
+{
+  "name": "Team Picker Wheel",
+  "description": "An interactive random team generator and spinning wheel tool to distribute participants into balanced teams with fairness rules, visual animations, and export options.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
